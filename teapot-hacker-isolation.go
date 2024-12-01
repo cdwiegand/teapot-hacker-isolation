@@ -15,7 +15,7 @@ import (
 // Config the plugin configuration.
 type Config struct {
 	MinInstances               int      `json:"minInstances"`
-	MinutesInJail              int      `json:"minutesInJail"`
+	ExpirySeconds              int      `json:"expirySeconds"`
 	ReturnCurrentExpiresHeader string   `json:"returnCurrentExpiresHeader"`
 	ReturnCurrentStatusHeader  string   `json:"returnCurrentStatusHeader"`
 	ReturnCurrentCountHeader   string   `json:"returnCurrentCountHeader"`
@@ -34,14 +34,14 @@ type Config struct {
 func CreateConfig() *Config {
 	return &Config{
 		MinInstances:               2,
-		MinutesInJail:              2,
+		ExpirySeconds:              2,
 		ReturnCurrentExpiresHeader: "",
 		ReturnCurrentStatusHeader:  "",
 		ReturnCurrentCountHeader:   "",
 		StorageSystem:              "Memory",
 		LoggingPrefix:              "TeapotIsolation: ",
 		TriggerOnHeaders:           []string{"X-Hacker-Detected"},
-		TriggerOnStatusCodes:       []int{418},
+		TriggerOnStatusCodes:       []int{418, 405},
 		ReturnStatusCodeOnBlock:    418,
 		ReturnBodyOnBlock:          "This is a coffee shop!",
 		ReturnHeadersOnBlock:       []string{"Content-Type: tea/earl-grey"},
@@ -62,7 +62,7 @@ func NewTeapotHackerIsolationPlugin(ctx context.Context, next http.Handler, conf
 		return nil, fmt.Errorf("config can not be nil")
 	}
 
-	logger := log.New(os.Stderr, "redis: ", log.LstdFlags|log.Lshortfile)
+	logger := log.New(os.Stderr, config.LoggingPrefix, log.LstdFlags|log.Lshortfile)
 
 	plugin := &TeapotHackerIsolationPlugin{
 		Config: config,
@@ -127,6 +127,8 @@ func (t *TeapotHackerIsolationPlugin) ReturnHackerResponse(rw http.ResponseWrite
 }
 
 func (t *TeapotHackerIsolationPlugin) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
+	jailTime := time.Duration(t.Config.ExpirySeconds) * time.Minute
+
 	ip, _, err := net.SplitHostPort(req.RemoteAddr)
 	if err != nil {
 		ip = req.RemoteAddr // this shouldn't happen??
@@ -135,7 +137,7 @@ func (t *TeapotHackerIsolationPlugin) ServeHTTP(rw http.ResponseWriter, req *htt
 	if err != nil {
 		t.Logger.Printf("Failed to get IP from storage: %s\n", err.Error())
 	} else if found.count >= t.Config.MinInstances {
-		// means we were able to get it :(
+		found = t.Storage.IncrIpViolations(ip, jailTime) // increment their badness
 		expiresAt := time.Unix(found.expires, 0)
 		t.Logger.Printf("IP %s is blocked until %s\n", ip, expiresAt.String())
 		t.ReturnHackerResponse(rw, found)
@@ -147,7 +149,6 @@ func (t *TeapotHackerIsolationPlugin) ServeHTTP(rw http.ResponseWriter, req *htt
 
 	badDetected := t.DetectIfHacker(rw2.Result())
 	if badDetected {
-		jailTime := time.Duration(t.Config.MinutesInJail) * time.Minute
 		found = t.Storage.IncrIpViolations(ip, jailTime)
 		if err != nil {
 			t.Logger.Printf("Unable to log bad IP to storage: %s\n", err.Error())

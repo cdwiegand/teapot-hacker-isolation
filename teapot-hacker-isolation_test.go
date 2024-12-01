@@ -27,7 +27,7 @@ func CreateTestConfig() *Config {
 	config.ReturnCurrentCountHeader = "X-Count-Teapots"
 	config.TriggerOnHeaders = []string{"X-Teapot-Detected"}
 	config.MinInstances = 2
-	config.MinutesInJail = 2
+	config.ExpirySeconds = 2
 	return config
 }
 

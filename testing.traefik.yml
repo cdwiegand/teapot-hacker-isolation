@@ -4,7 +4,7 @@ http:
       plugin:
         teapot_hacker_isolation:
           minInstances: 2
-          minutesInJail: 2
+          expirySeconds: 2
           returnCurrentStatusHeader: X-Teapot-Status
           returnCurrentCountHeader: X-Teapot-Count
           returnCurrentExpiresHeader: X-Teapot-Expires

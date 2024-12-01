@@ -7,6 +7,7 @@ http:
           minutesInJail: 2
           returnCurrentStatusHeader: X-Teapot-Status
           returnCurrentCountHeader: X-Teapot-Count
+          returnCurrentExpiresHeader: X-Teapot-Expires
           storageSystem: Memory
           loggingPrefix: "Teapot -> "
           triggerOnHeaders: [ "X-Hacker-Detected" ]

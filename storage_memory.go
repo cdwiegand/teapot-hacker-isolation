@@ -6,32 +6,27 @@ import (
 )
 
 type MemoryStorage struct {
-	cache map[string]MemoryStorageItem
-}
-
-type MemoryStorageItem struct {
-	count   int
-	expires int64
+	cache map[string]StorageItem
 }
 
 func NewMemoryStorage() *MemoryStorage {
 	ret := MemoryStorage{
-		cache: make(map[string]MemoryStorageItem),
+		cache: make(map[string]StorageItem),
 	}
 	return &ret
 }
 
-func (r *MemoryStorage) GetIpViolations(ip string) (int, error) {
+func (r *MemoryStorage) GetIpViolations(ip string) StorageItem {
 	for h, v := range r.cache {
 		if h == ip && v.expires >= time.Now().Unix() {
-			return v.count, nil
+			return v
 		}
 	}
 	// TODO FIXME: kick off thread to GC old entries??
-	return 0, nil
+	return StorageItem{}
 }
 
-func (r *MemoryStorage) IncrIpViolations(ip string, jailTime time.Duration) (int, error) {
+func (r *MemoryStorage) IncrIpViolations(ip string, jailTime time.Duration) StorageItem {
 	now := time.Now().Unix()
 	newExpires := now + int64(jailTime.Seconds())
 	for h, v := range r.cache {
@@ -40,12 +35,13 @@ func (r *MemoryStorage) IncrIpViolations(ip string, jailTime time.Duration) (int
 			v.count = v.count + 1
 			v.expires = newExpires
 			r.cache[ip] = v // set back into memory cache
-			return v.count, nil
+			return v
 		}
 	}
-	r.cache[ip] = MemoryStorageItem{
+	ret := StorageItem{
 		count:   1,
 		expires: newExpires,
 	}
-	return 1, nil
+	r.cache[ip] = ret
+	return ret
 }

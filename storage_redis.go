@@ -9,7 +9,7 @@ import (
 )
 
 type RedisStorage struct {
-	config    *RedisStorageConfig
+	config    RedisStorageConfig
 	redisConn *redis.Client
 }
 
@@ -18,43 +18,56 @@ type RedisStorageConfig struct {
 	Port int    `json:"port"`
 }
 
-func NewRedisStorageConfig() *RedisStorageConfig {
-	return &RedisStorageConfig{
-		Host: "localhost",
-		Port: 6379,
+func NewRedisStorage(config *Config) (*RedisStorage, error) {
+	redisConfig := RedisStorageConfig{
+		Host: config.RedisHost,
+		Port: config.RedisPort,
 	}
-}
-
-func NewRedisStorage(config *RedisStorageConfig) (*RedisStorage, error) {
-	if config.Host == "" {
-		config.Host = "localhost"
+	if redisConfig.Host == "" {
+		redisConfig.Host = "localhost"
 	}
-	if config.Port == 0 {
-		config.Port = 6379
+	if redisConfig.Port == 0 {
+		redisConfig.Port = 6379
 	}
 	client := redis.NewClient(&redis.Options{
-		Addr: fmt.Sprintf("%s:%d", config.Host, config.Port),
+		Addr: fmt.Sprintf("%s:%d", redisConfig.Host, redisConfig.Port),
 	})
 
 	return &RedisStorage{
-		config:    config,
+		config:    redisConfig,
 		redisConn: client,
 	}, nil
 }
 
-func (r *RedisStorage) GetIpViolations(ip string) (int, error) {
+func (r *RedisStorage) GetIpViolations(ip string) StorageItem {
 	var foundI int
-	found, err := r.redisConn.Get("ip:" + ip).Result()
+	key := r.buildRedisKey(ip)
+	found, err := r.redisConn.Get(key).Result()
+	ret := StorageItem{}
 	if err == nil {
 		foundI, err = strconv.Atoi(found)
+		if err == nil {
+			ret.count = foundI
+			t, _ := r.redisConn.TTL(key).Result()
+			ret.expires = time.Now().Unix() + int64(t.Seconds())
+		}
+		r.redisConn.TTL(key)
 	}
-	return foundI, err
+	return ret
 }
 
-func (r *RedisStorage) IncrIpViolations(ip string, jailTime time.Duration) (int, error) {
-	newVal, err := r.redisConn.Incr("ip:" + ip).Result()
+func (r *RedisStorage) IncrIpViolations(ip string, jailTime time.Duration) StorageItem {
+	ret := StorageItem{}
+	key := r.buildRedisKey(ip)
+	newVal, err := r.redisConn.Incr(key).Result()
 	if err == nil {
-		r.redisConn.Expire("ip:"+ip, jailTime).Result()
+		ret.count = int(newVal)
+		ret.expires = time.Now().Unix() + int64(jailTime.Seconds())
+		r.redisConn.ExpireAtUnix(key, ret.expires)
 	}
-	return int(newVal), err
+	return ret
+}
+
+func (r *RedisStorage) buildRedisKey(ip string) string {
+	return "ip:" + ip
 }

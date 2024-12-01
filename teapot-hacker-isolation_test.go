@@ -44,7 +44,15 @@ func CreateTestPlugin(config *Config, ctx context.Context) (*TeapotHackerIsolati
 	}), config, "testing")
 }
 
-func TestServeHTTP(t *testing.T) {
+func TestServeHTTP_IPv4(t *testing.T) {
+	NotATestServeHTTP(t, "0.1.2.3:666") // ipv
+}
+
+func TestServeHTTP_IPv6(t *testing.T) {
+	NotATestServeHTTP(t, "[::1]:666") // ipv6
+}
+
+func NotATestServeHTTP(t *testing.T, hostAndIp string) {
 	ctx := context.Background()
 	config := CreateTestConfig()
 	newPlugin, err := CreateTestPlugin(config, ctx)
@@ -53,11 +61,11 @@ func TestServeHTTP(t *testing.T) {
 	}
 
 	req418, _ := http.NewRequestWithContext(ctx, http.MethodGet, "http://localhost/418-please", nil)
-	req418.RemoteAddr = "testip"
+	req418.RemoteAddr = hostAndIp
 	reqHeader, _ := http.NewRequestWithContext(ctx, http.MethodGet, "http://localhost/teapot-header-please", nil)
-	reqHeader.RemoteAddr = "testip"
+	reqHeader.RemoteAddr = hostAndIp
 	reqInnocent, _ := http.NewRequestWithContext(ctx, http.MethodGet, "http://localhost/innocent", nil)
-	reqInnocent.RemoteAddr = "testip"
+	reqInnocent.RemoteAddr = hostAndIp
 
 	var recorder *httptest.ResponseRecorder
 	var response *http.Response

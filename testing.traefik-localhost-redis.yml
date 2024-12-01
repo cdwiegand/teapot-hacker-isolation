@@ -3,18 +3,17 @@ http:
     teapot-hacker-isolation:
       plugin:
         teapot_hacker_isolation:
-          minutesInJail: 2
           minInstances: 2
+          minutesInJail: 2
           returnCurrentStatusHeader: X-Teapot-Status
           returnCurrentCountHeader: X-Teapot-Count
+          returnCurrentExpiresHeader: X-Teapot-Expires
           storageSystem: Redis
-          redis:
-           - server: redis://@localhost:6379
+          redisHost: 127.0.0.1
+          redisPort: 6379
           loggingPrefix: "Teapot -> "
-          triggerOnHeaders:
-            - X-Hacker-Detected
-          triggerOnStatusCodes:
-            - 418
+          triggerOnHeaders: [ "X-Hacker-Detected" ]
+          triggerOnStatusCodes: [ 418, 405 ]
           blockedStatusCode: 418
   routers:
     test:

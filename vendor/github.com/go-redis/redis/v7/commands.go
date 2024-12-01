@@ -427,6 +427,12 @@ func (c cmdable) ExpireAt(key string, tm time.Time) *BoolCmd {
 	return cmd
 }
 
+func (c cmdable) ExpireAtUnix(key string, tm int64) *BoolCmd {
+	cmd := NewBoolCmd("expireat", key, tm)
+	_ = c(cmd)
+	return cmd
+}
+
 func (c cmdable) Keys(pattern string) *StringSliceCmd {
 	cmd := NewStringSliceCmd("keys", pattern)
 	_ = c(cmd)

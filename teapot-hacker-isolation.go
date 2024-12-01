@@ -14,35 +14,37 @@ import (
 
 // Config the plugin configuration.
 type Config struct {
-	MinInstances              int                 `json:"minInstances"`
-	MinutesInJail             int                 `json:"minutesInJail"`
-	ReturnCurrentStatusHeader string              `json:"returnCurrentStatusHeader"`
-	ReturnCurrentCountHeader  string              `json:"returnCurrentCountHeader"`
-	StorageSystem             string              `json:"storageSystem"`
-	RedisStorageConfig        *RedisStorageConfig `json:"redis"`
-	LoggingPrefix             string              `json:"loggingPrefix"`
-	TriggerOnHeaders          []string            `json:"triggerOnHeaders"`
-	TriggerOnStatusCodes      []int               `json:"triggerOnStatusCodes"`
-	ReturnStatusCodeOnBlock   int                 `json:"blockedStatusCode"`
-	ReturnBodyOnBlock         string              `json:"blockedBody"`
-	ReturnHeadersOnBlock      []string            `json:"blockedHeaders"`
+	MinInstances               int      `json:"minInstances"`
+	MinutesInJail              int      `json:"minutesInJail"`
+	ReturnCurrentExpiresHeader string   `json:"returnCurrentExpiresHeader"`
+	ReturnCurrentStatusHeader  string   `json:"returnCurrentStatusHeader"`
+	ReturnCurrentCountHeader   string   `json:"returnCurrentCountHeader"`
+	StorageSystem              string   `json:"storageSystem"`
+	RedisHost                  string   `json:"redisHost"`
+	RedisPort                  int      `json:"redisPort"`
+	LoggingPrefix              string   `json:"loggingPrefix"`
+	TriggerOnHeaders           []string `json:"triggerOnHeaders"`
+	TriggerOnStatusCodes       []int    `json:"triggerOnStatusCodes"`
+	ReturnStatusCodeOnBlock    int      `json:"blockedStatusCode"`
+	ReturnBodyOnBlock          string   `json:"blockedBody"`
+	ReturnHeadersOnBlock       []string `json:"blockedHeaders"`
 }
 
 // CreateConfig creates the DEFAULT plugin configuration - no access to config yet!
 func CreateConfig() *Config {
 	return &Config{
-		MinInstances:              2,
-		MinutesInJail:             2,
-		ReturnCurrentStatusHeader: "",
-		ReturnCurrentCountHeader:  "",
-		StorageSystem:             "memory",
-		RedisStorageConfig:        NewRedisStorageConfig(),
-		LoggingPrefix:             "TeapotIsolation: ",
-		TriggerOnHeaders:          []string{"X-Hacker-Detected"},
-		TriggerOnStatusCodes:      []int{418},
-		ReturnStatusCodeOnBlock:   418,
-		ReturnBodyOnBlock:         "This is a coffee shop!",
-		ReturnHeadersOnBlock:      []string{"Content-Type: tea/earl-grey"},
+		MinInstances:               2,
+		MinutesInJail:              2,
+		ReturnCurrentExpiresHeader: "",
+		ReturnCurrentStatusHeader:  "",
+		ReturnCurrentCountHeader:   "",
+		StorageSystem:              "Memory",
+		LoggingPrefix:              "TeapotIsolation: ",
+		TriggerOnHeaders:           []string{"X-Hacker-Detected"},
+		TriggerOnStatusCodes:       []int{418},
+		ReturnStatusCodeOnBlock:    418,
+		ReturnBodyOnBlock:          "This is a coffee shop!",
+		ReturnHeadersOnBlock:       []string{"Content-Type: tea/earl-grey"},
 	}
 }
 
@@ -76,7 +78,7 @@ func NewTeapotHackerIsolationPlugin(ctx context.Context, next http.Handler, conf
 	case "memory":
 		plugin.Storage = NewMemoryStorage()
 	case "redis":
-		redis, err := NewRedisStorage(config.RedisStorageConfig)
+		redis, err := NewRedisStorage(config)
 		if err == nil && redis != nil {
 			plugin.Storage = redis
 		}
@@ -92,13 +94,26 @@ func New(ctx context.Context, next http.Handler, config *Config, name string) (h
 	return NewTeapotHackerIsolationPlugin(ctx, next, config, name)
 }
 
-func (t *TeapotHackerIsolationPlugin) ReturnHackerResponse(rw http.ResponseWriter, found int) {
-	if t.Config.ReturnCurrentStatusHeader != "" {
-		rw.Header().Set(t.Config.ReturnCurrentStatusHeader, "BLOCKED")
+func (t *TeapotHackerIsolationPlugin) AppendStatusHeaders(rw http.ResponseWriter, found StorageItem, blocked bool) {
+	if blocked {
+		if t.Config.ReturnCurrentStatusHeader != "" {
+			rw.Header().Set(t.Config.ReturnCurrentStatusHeader, "BLOCKED")
+		}
+		if t.Config.ReturnCurrentExpiresHeader != "" {
+			expiresAt := time.Unix(found.expires, 0)
+			rw.Header().Set(t.Config.ReturnCurrentExpiresHeader, expiresAt.String())
+		}
+	} else {
+		if t.Config.ReturnCurrentStatusHeader != "" {
+			rw.Header().Set(t.Config.ReturnCurrentStatusHeader, "OK")
+		}
 	}
 	if t.Config.ReturnCurrentCountHeader != "" {
-		rw.Header().Set(t.Config.ReturnCurrentCountHeader, fmt.Sprintf("%d", found))
+		rw.Header().Set(t.Config.ReturnCurrentCountHeader, fmt.Sprintf("%d", found.count))
 	}
+}
+func (t *TeapotHackerIsolationPlugin) ReturnHackerResponse(rw http.ResponseWriter, found StorageItem) {
+	t.AppendStatusHeaders(rw, found, true)
 	for _, v := range t.Config.ReturnHeadersOnBlock {
 		if strings.Contains(v, ":") {
 			parts := strings.SplitN(v, ":", 2)
@@ -116,14 +131,15 @@ func (t *TeapotHackerIsolationPlugin) ServeHTTP(rw http.ResponseWriter, req *htt
 	if err != nil {
 		ip = req.RemoteAddr // this shouldn't happen??
 	}
-	found, err := t.Storage.GetIpViolations(ip)
+	found := t.Storage.GetIpViolations(ip)
 	if err != nil {
 		t.Logger.Printf("Failed to get IP from storage: %s\n", err.Error())
-	} else if found >= t.Config.MinInstances {
+	} else if found.count >= t.Config.MinInstances {
 		// means we were able to get it :(
-		t.Logger.Printf("IP %s is blocked\n", ip)
+		expiresAt := time.Unix(found.expires, 0)
+		t.Logger.Printf("IP %s is blocked until %s\n", ip, expiresAt.String())
 		t.ReturnHackerResponse(rw, found)
-		return
+		return // DO NOT CONTINUE
 	}
 
 	rw2 := httptest.NewRecorder()
@@ -132,13 +148,15 @@ func (t *TeapotHackerIsolationPlugin) ServeHTTP(rw http.ResponseWriter, req *htt
 	badDetected := t.DetectIfHacker(rw2.Result())
 	if badDetected {
 		jailTime := time.Duration(t.Config.MinutesInJail) * time.Minute
-		found, err = t.Storage.IncrIpViolations(ip, jailTime)
+		found = t.Storage.IncrIpViolations(ip, jailTime)
 		if err != nil {
 			t.Logger.Printf("Unable to log bad IP to storage: %s\n", err.Error())
 		}
-		if found >= t.Config.MinInstances {
-			t.Logger.Printf("IP %s is now blocked\n", ip)
+		if found.count >= t.Config.MinInstances {
+			expiresAt := time.Unix(found.expires, 0)
+			t.Logger.Printf("IP %s is now blocked until %s\n", ip, expiresAt.String())
 			t.ReturnHackerResponse(rw, found)
+			return // DO NOT CONTINUE
 		}
 	}
 
@@ -148,12 +166,8 @@ func (t *TeapotHackerIsolationPlugin) ServeHTTP(rw http.ResponseWriter, req *htt
 			rw.Header().Add(h, v)
 		}
 	}
-	if t.Config.ReturnCurrentStatusHeader != "" {
-		rw.Header().Set(t.Config.ReturnCurrentStatusHeader, "OK")
-	}
-	if t.Config.ReturnCurrentCountHeader != "" {
-		rw.Header().Set(t.Config.ReturnCurrentCountHeader, fmt.Sprintf("%d", found))
-	}
+	t.AppendStatusHeaders(rw, found, false)
+	// now write status code, after which we can only write body, no more headers!
 	rw.WriteHeader(rw2.Result().StatusCode)
 	if rw2.Body.Len() > 0 {
 		rw.Write(rw2.Body.Bytes())

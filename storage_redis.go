@@ -1,44 +1,50 @@
 package teapot_hacker_isolation
 
 import (
-	"context"
+	"fmt"
 	"strconv"
 	"time"
 
-	redis "github.com/redis/go-redis/v9"
+	"github.com/go-redis/redis/v7"
 )
 
 type RedisStorage struct {
-	IStorage
-
-	config       RedisStorageConfig
-	redisOptions *redis.Options
-	redisConn    *redis.Client
+	config    *RedisStorageConfig
+	redisConn *redis.Client
 }
 
 type RedisStorageConfig struct {
-	RedisServer string `json:"server"`
+	Host string `json:"host"`
+	Port int    `json:"port"`
 }
 
-func NewRedisStorage(config RedisStorageConfig) (*RedisStorage, error) {
-	opt, err := redis.ParseURL(config.RedisServer)
-	if err != nil {
-		return nil, err
+func NewRedisStorageConfig() *RedisStorageConfig {
+	return &RedisStorageConfig{
+		Host: "localhost",
+		Port: 6379,
 	}
+}
 
-	redisConn := redis.NewClient(opt)
+func NewRedisStorage(config *RedisStorageConfig) (*RedisStorage, error) {
+	if config.Host == "" {
+		config.Host = "localhost"
+	}
+	if config.Port == 0 {
+		config.Port = 6379
+	}
+	client := redis.NewClient(&redis.Options{
+		Addr: fmt.Sprintf("%s:%d", config.Host, config.Port),
+	})
 
 	return &RedisStorage{
-		config:       config,
-		redisOptions: opt,
-		redisConn:    redisConn,
+		config:    config,
+		redisConn: client,
 	}, nil
 }
 
 func (r *RedisStorage) GetIpViolations(ip string) (int, error) {
-	ctx := context.Background()
 	var foundI int
-	found, err := r.redisConn.Get(ctx, "ip:"+ip).Result()
+	found, err := r.redisConn.Get("ip:" + ip).Result()
 	if err == nil {
 		foundI, err = strconv.Atoi(found)
 	}
@@ -46,10 +52,9 @@ func (r *RedisStorage) GetIpViolations(ip string) (int, error) {
 }
 
 func (r *RedisStorage) IncrIpViolations(ip string, jailTime time.Duration) (int, error) {
-	ctx := context.Background()
-	newVal, err := r.redisConn.Incr(ctx, "ip:"+ip).Result()
+	newVal, err := r.redisConn.Incr("ip:" + ip).Result()
 	if err == nil {
-		r.redisConn.Expire(ctx, "ip:"+ip, jailTime)
+		r.redisConn.Expire("ip:"+ip, jailTime)
 	}
 	return int(newVal), err
 }

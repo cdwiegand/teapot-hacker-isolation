@@ -3,16 +3,14 @@ http:
     teapot-hacker-isolation:
       plugin:
         teapot_hacker_isolation:
-          minutesInJail: 2
           minInstances: 2
+          minutesInJail: 2
           returnCurrentStatusHeader: X-Teapot-Status
           returnCurrentCountHeader: X-Teapot-Count
           storageSystem: Memory
           loggingPrefix: "Teapot -> "
-          triggerOnHeaders:
-            - X-Hacker-Detected
-          triggerOnStatusCodes:
-            - 416
+          triggerOnHeaders: [ "X-Hacker-Detected" ]
+          triggerOnStatusCodes: [ 416 ]
           blockedStatusCode: 416
   routers:
     test:

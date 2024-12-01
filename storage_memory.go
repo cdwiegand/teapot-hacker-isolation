@@ -3,8 +3,6 @@ package teapot_hacker_isolation
 import "time"
 
 type MemoryStorage struct {
-	IStorage
-
 	cache map[string]MemoryStorageItem
 }
 
@@ -14,9 +12,10 @@ type MemoryStorageItem struct {
 }
 
 func NewMemoryStorage() (*MemoryStorage, error) {
-	ret := &MemoryStorage{}
-	ret.cache = make(map[string]MemoryStorageItem)
-	return ret, nil
+	ret := MemoryStorage{
+		cache: make(map[string]MemoryStorageItem),
+	}
+	return &ret, nil
 }
 
 func (r *MemoryStorage) GetIpViolations(ip string) (int, error) {

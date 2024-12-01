@@ -12,28 +12,31 @@ import (
 
 // Config the plugin configuration.
 type Config struct {
-	MinInstances              int                `json:"minInstances"`
-	MinutesInJail             int                `json:"minutesInJail"`
-	ReturnCurrentStatusHeader string             `json:"returnCurrentStatusHeader"`
-	ReturnCurrentCountHeader  string             `json:"returnCurrentCountHeader"`
-	StorageSystem             string             `json:"storageSystem"`
-	RedisStorageConfig        RedisStorageConfig `json:"redis"`
-	LoggingPrefix             string             `json:"loggingPrefix"`
-	TriggerOnHeaders          []string           `json:"triggerOnHeaders"`
-	TriggerOnStatusCodes      []int              `json:"triggerOnStatusCodes"`
-	ReturnStatusCodeOnBlock   int                `json:"blockedStatusCode"`
+	MinInstances              int                 `json:"minInstances"`
+	MinutesInJail             int                 `json:"minutesInJail"`
+	ReturnCurrentStatusHeader string              `json:"returnCurrentStatusHeader"`
+	ReturnCurrentCountHeader  string              `json:"returnCurrentCountHeader"`
+	StorageSystem             string              `json:"storageSystem"`
+	RedisStorageConfig        *RedisStorageConfig `json:"redis"`
+	LoggingPrefix             string              `json:"loggingPrefix"`
+	TriggerOnHeaders          []string            `json:"triggerOnHeaders"`
+	TriggerOnStatusCodes      []int               `json:"triggerOnStatusCodes"`
+	ReturnStatusCodeOnBlock   int                 `json:"blockedStatusCode"`
 }
 
 // CreateConfig creates the DEFAULT plugin configuration - no access to config yet!
 func CreateConfig() *Config {
 	return &Config{
-		MinInstances:            2,
-		MinutesInJail:           2,
-		StorageSystem:           "memory",
-		LoggingPrefix:           "TeapotIsolation: ",
-		TriggerOnHeaders:        []string{"X-Hacker-Detected"},
-		TriggerOnStatusCodes:    []int{416},
-		ReturnStatusCodeOnBlock: 416,
+		MinInstances:              2,
+		MinutesInJail:             2,
+		ReturnCurrentStatusHeader: "",
+		ReturnCurrentCountHeader:  "",
+		StorageSystem:             "memory",
+		RedisStorageConfig:        NewRedisStorageConfig(),
+		LoggingPrefix:             "TeapotIsolation: ",
+		TriggerOnHeaders:          []string{"X-Hacker-Detected"},
+		TriggerOnStatusCodes:      []int{416},
+		ReturnStatusCodeOnBlock:   416,
 	}
 }
 

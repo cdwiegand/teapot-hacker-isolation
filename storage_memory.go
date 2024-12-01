@@ -1,6 +1,9 @@
 package teapot_hacker_isolation
 
-import "time"
+import (
+	"os"
+	"time"
+)
 
 type MemoryStorage struct {
 	cache map[string]MemoryStorageItem
@@ -11,11 +14,11 @@ type MemoryStorageItem struct {
 	expires int64
 }
 
-func NewMemoryStorage() (*MemoryStorage, error) {
+func NewMemoryStorage() *MemoryStorage {
 	ret := MemoryStorage{
 		cache: make(map[string]MemoryStorageItem),
 	}
-	return &ret, nil
+	return &ret
 }
 
 func (r *MemoryStorage) GetIpViolations(ip string) (int, error) {
@@ -29,21 +32,20 @@ func (r *MemoryStorage) GetIpViolations(ip string) (int, error) {
 }
 
 func (r *MemoryStorage) IncrIpViolations(ip string, jailTime time.Duration) (int, error) {
+	now := time.Now().Unix()
+	newExpires := now + int64(jailTime.Seconds())
 	for h, v := range r.cache {
-		if h == ip {
-			if v.expires < time.Now().Unix() {
-				v.count = 1
-			} else {
-				v.count = v.count + 1
-			}
-			r.cache[h] = v // set back into memory cache
-			v.expires = time.Now().Unix() + int64(jailTime.Seconds())
+		if h == ip && v.expires >= now {
+			os.Stderr.WriteString("matched!\n")
+			v.count = v.count + 1
+			v.expires = newExpires
+			r.cache[ip] = v // set back into memory cache
 			return v.count, nil
 		}
 	}
 	r.cache[ip] = MemoryStorageItem{
 		count:   1,
-		expires: time.Now().Unix() + int64(jailTime.Seconds()),
+		expires: newExpires,
 	}
 	return 1, nil
 }

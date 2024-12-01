@@ -3,9 +3,11 @@ package teapot_hacker_isolation
 import (
 	"context"
 	"fmt"
-	"io"
+	"log"
+	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"time"
 )
@@ -35,14 +37,14 @@ func CreateConfig() *Config {
 		RedisStorageConfig:        NewRedisStorageConfig(),
 		LoggingPrefix:             "TeapotIsolation: ",
 		TriggerOnHeaders:          []string{"X-Hacker-Detected"},
-		TriggerOnStatusCodes:      []int{416},
-		ReturnStatusCodeOnBlock:   416,
+		TriggerOnStatusCodes:      []int{418},
+		ReturnStatusCodeOnBlock:   418,
 	}
 }
 
 type TeapotHackerIsolationPlugin struct {
 	Config  *Config
-	Logger  *MyTraefikLogger
+	Logger  *log.Logger
 	Storage IStorage
 	name    string
 	next    http.Handler
@@ -54,32 +56,31 @@ func NewTeapotHackerIsolationPlugin(ctx context.Context, next http.Handler, conf
 		return nil, fmt.Errorf("config can not be nil")
 	}
 
-	var storage IStorage
+	logger := log.New(os.Stderr, "redis: ", log.LstdFlags|log.Lshortfile)
+
+	plugin := &TeapotHackerIsolationPlugin{
+		Config: config,
+		Logger: logger,
+		next:   next,
+		name:   name,
+	}
+
+	//var storage IStorage
 	var err error
 	storageType := strings.ToLower(config.StorageSystem)
 	switch storageType {
 	case "memory":
-		storage, err = NewMemoryStorage()
+		plugin.Storage = NewMemoryStorage()
 	case "redis":
-		storage, err = NewRedisStorage(config.RedisStorageConfig)
+		redis, err := NewRedisStorage(config.RedisStorageConfig)
+		if err == nil && redis != nil {
+			plugin.Storage = redis
+		}
 	default:
 		panic(fmt.Sprintf("Storage type %s unknown", config.StorageSystem))
 	}
-	logger := NewMyTraefikLogger(config.LoggingPrefix)
 
-	plugin := &TeapotHackerIsolationPlugin{
-		Config:  config,
-		Logger:  logger,
-		Storage: storage,
-		next:    next,
-		name:    name,
-	}
-
-	if err != nil {
-		return nil, err
-	}
-
-	return plugin, nil
+	return plugin, err
 }
 
 // for Traefik plugin integration
@@ -88,12 +89,16 @@ func New(ctx context.Context, next http.Handler, config *Config, name string) (h
 }
 
 func (t *TeapotHackerIsolationPlugin) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
-	found, err := t.Storage.GetIpViolations(req.RemoteAddr)
+	ip, _, err := net.SplitHostPort(req.RemoteAddr)
 	if err != nil {
-		t.Logger.Errore(err, "Failed to get IP from storage")
+		ip = req.RemoteAddr // this shouldn't happen??
+	}
+	found, err := t.Storage.GetIpViolations(ip)
+	if err != nil {
+		t.Logger.Printf("Failed to get IP from storage: %s\n", err.Error())
 	} else if found >= t.Config.MinInstances {
 		// means we were able to get it :(
-		t.Logger.Warnf("IP %s is blocked", req.RemoteAddr)
+		t.Logger.Printf("IP %s is blocked\n", ip)
 		if t.Config.ReturnCurrentStatusHeader != "" {
 			rw.Header().Set(t.Config.ReturnCurrentStatusHeader, "BLOCKED")
 		}
@@ -111,15 +116,15 @@ func (t *TeapotHackerIsolationPlugin) ServeHTTP(rw http.ResponseWriter, req *htt
 	badDetected := t.DetectIfHacker(rw2.Result())
 	if badDetected {
 		jailTime := time.Duration(t.Config.MinutesInJail) * time.Minute
-		found, err = t.Storage.IncrIpViolations(req.RemoteAddr, jailTime)
+		found, err = t.Storage.IncrIpViolations(ip, jailTime)
 		if err != nil {
-			t.Logger.Warne(err, "Unable to log bad IP to redis")
+			t.Logger.Printf("Unable to log bad IP to redis: %s\n", err.Error())
 		}
 		if t.Config.ReturnCurrentCountHeader != "" {
 			rw.Header().Set(t.Config.ReturnCurrentCountHeader, fmt.Sprintf("%d", found))
 		}
 		if found >= t.Config.MinInstances {
-			t.Logger.Warnf("IP %s is now blocked", req.RemoteAddr)
+			t.Logger.Printf("IP %s is now blocked\n", ip)
 			if t.Config.ReturnCurrentStatusHeader != "" {
 				rw.Header().Set(t.Config.ReturnCurrentStatusHeader, "BLOCKED")
 			}
@@ -141,9 +146,8 @@ func (t *TeapotHackerIsolationPlugin) ServeHTTP(rw http.ResponseWriter, req *htt
 		rw.Header().Set(t.Config.ReturnCurrentCountHeader, fmt.Sprintf("%d", found))
 	}
 	rw.WriteHeader(rw2.Result().StatusCode)
-	body, err := io.ReadAll(rw2.Result().Body)
-	if err != nil && len(body) > 0 {
-		rw.Write(body)
+	if rw2.Body.Len() > 0 {
+		rw.Write(rw2.Body.Bytes())
 	}
 }
 

@@ -2,7 +2,7 @@ displayName: Teapot Hacker Isolation
 type: middleware
 import: github.com/cdwiegand/teapot-hacker-isolation
 basePkg: teapot_hacker_isolation
-summary: "Attackers who trigger backend 416 I'm a teapot responses can get blocked for a period of time."
+summary: "Attackers who trigger backend 418 I'm a teapot responses can get blocked for a period of time."
 testData:
   minutesInJail: 2
   minInstances: 2
@@ -13,5 +13,5 @@ testData:
   triggerOnHeaders:
     - X-Hacker-Detected
   triggerOnStatusCodes:
-    - 416
-  blockedStatusCode: 416
+    - 418
+  blockedStatusCode: 418

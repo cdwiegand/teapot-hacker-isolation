@@ -10,8 +10,8 @@ http:
           storageSystem: Memory
           loggingPrefix: "Teapot -> "
           triggerOnHeaders: [ "X-Hacker-Detected" ]
-          triggerOnStatusCodes: [ 416 ]
-          blockedStatusCode: 416
+          triggerOnStatusCodes: [ 418, 405 ]
+          blockedStatusCode: 418
   routers:
     test:
       rule: "PathPrefix(`/`)"

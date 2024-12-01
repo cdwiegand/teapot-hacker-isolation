@@ -54,7 +54,7 @@ func (r *RedisStorage) GetIpViolations(ip string) (int, error) {
 func (r *RedisStorage) IncrIpViolations(ip string, jailTime time.Duration) (int, error) {
 	newVal, err := r.redisConn.Incr("ip:" + ip).Result()
 	if err == nil {
-		r.redisConn.Expire("ip:"+ip, jailTime)
+		r.redisConn.Expire("ip:"+ip, jailTime).Result()
 	}
 	return int(newVal), err
 }

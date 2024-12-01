@@ -14,8 +14,8 @@ http:
           triggerOnHeaders:
             - X-Hacker-Detected
           triggerOnStatusCodes:
-            - 416
-          blockedStatusCode: 416
+            - 418
+          blockedStatusCode: 418
   routers:
     test:
       rule: "PathPrefix(`/`)"

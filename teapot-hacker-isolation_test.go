@@ -36,8 +36,8 @@ func CreateTestPlugin(config *Config, ctx context.Context) (*TeapotHackerIsolati
 		if strings.Contains(req.URL.Path, "teapot-header") {
 			rw.Header().Add(config.TriggerOnHeaders[0], "1")
 		}
-		if strings.Contains(req.URL.Path, "416") {
-			rw.WriteHeader(416)
+		if strings.Contains(req.URL.Path, "418") {
+			rw.WriteHeader(418)
 		} else {
 			rw.WriteHeader(200)
 		}
@@ -52,8 +52,8 @@ func TestServeHTTP(t *testing.T) {
 		t.FailNow()
 	}
 
-	req416, _ := http.NewRequestWithContext(ctx, http.MethodGet, "http://localhost/416-please", nil)
-	req416.RemoteAddr = "testip"
+	req418, _ := http.NewRequestWithContext(ctx, http.MethodGet, "http://localhost/418-please", nil)
+	req418.RemoteAddr = "testip"
 	reqHeader, _ := http.NewRequestWithContext(ctx, http.MethodGet, "http://localhost/teapot-header-please", nil)
 	reqHeader.RemoteAddr = "testip"
 	reqInnocent, _ := http.NewRequestWithContext(ctx, http.MethodGet, "http://localhost/innocent", nil)
@@ -80,10 +80,10 @@ func TestServeHTTP(t *testing.T) {
 	}
 
 	recorder = httptest.NewRecorder()
-	newPlugin.ServeHTTP(recorder, req416)
+	newPlugin.ServeHTTP(recorder, req418)
 	response = recorder.Result()
-	if response.StatusCode != 416 {
-		t.Errorf("Got non-416 result, I requested one though, I got %d instead", response.StatusCode)
+	if response.StatusCode != 418 {
+		t.Errorf("Got non-418 result, I requested one though, I got %d instead", response.StatusCode)
 		return
 	}
 	if response.Header[config.ReturnCurrentCountHeader] == nil {
@@ -116,8 +116,8 @@ func TestServeHTTP(t *testing.T) {
 	// now try to trigger by header
 	newPlugin.ServeHTTP(recorder, reqHeader)
 	response = recorder.Result()
-	if response.StatusCode != 416 {
-		t.Errorf("Got non-416 result, I requested one though, I got %d instead", response.StatusCode)
+	if response.StatusCode != 418 {
+		t.Errorf("Got non-418 result, I requested one though, I got %d instead", response.StatusCode)
 		return
 	}
 	if response.Header[config.ReturnCurrentCountHeader] == nil {
@@ -133,8 +133,8 @@ func TestServeHTTP(t *testing.T) {
 	// should be blocked now
 	newPlugin.ServeHTTP(recorder, reqInnocent)
 	response = recorder.Result()
-	if response.StatusCode != 416 {
-		t.Errorf("Got non-416 result, I should be blocked by now, I got %d instead", response.StatusCode)
+	if response.StatusCode != 418 {
+		t.Errorf("Got non-418 result, I should be blocked by now, I got %d instead", response.StatusCode)
 		return
 	}
 	if response.Header[config.ReturnCurrentCountHeader] == nil {
@@ -156,7 +156,7 @@ func TestDetectIfHacker(t *testing.T) {
 	}
 
 	resp := &http.Response{
-		StatusCode: 416,
+		StatusCode: 418,
 	}
 	if !newPlugin.DetectIfHacker(resp) {
 		t.FailNow()
